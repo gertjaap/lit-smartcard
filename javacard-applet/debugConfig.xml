@@ -1,0 +1,9 @@
+<JavaCardProject name="CryptoEMV">
+<USER>
+<PKG name="org.gertjaap.cryptoemv" aid="4A 87 AB 57 43 61 72 64 4F 53" major="1" minor="0"/>
+<Libs/>
+</USER>
+<DebugInfo>
+<Protocol name="T01"/>
+</DebugInfo>
+</JavaCardProject>

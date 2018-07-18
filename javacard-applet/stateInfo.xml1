@@ -1,0 +1,17 @@
+<StateInfo>
+<ExpandNodes>
+<PkgNodes>
+<Node>org.gertjaap.cryptoemv</Node>
+</PkgNodes>
+</ExpandNodes>
+<FileNodes>
+<fnode>
+<fileName>C:\JavaCardKit\SDK\Tools\JCIDE\apis\jc222\javacard\framework\ISO7816.java</fileName>
+<line>103</line>
+</fnode>
+<ActiveFile>
+<fileName>src\org\gertjaap\cryptoemv\CryptoEMVApplet.java</fileName>
+<line>134</line>
+</ActiveFile>
+</FileNodes>
+</StateInfo>
