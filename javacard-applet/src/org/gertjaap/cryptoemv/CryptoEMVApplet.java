@@ -36,9 +36,12 @@ public class CryptoEMVApplet extends Applet
     private static final byte INS_ECC_GET_PUBKEY           = (byte)0x42;
     private static final byte INS_ECC_SIGN                 = (byte)0x43;
     private static final byte INS_ECC_GETINTERFACE		   = (byte)0x44;
+    private static final byte INS_SETPKH		   		   = (byte)0x45;
+    private static final byte INS_GETPKH		           = (byte)0x46;
     
     private static short PUBKEY_LEN = (short)65;
     private static short PRIVKEY_LEN = (short)32;
+	private static short PKH_LEN = (short)20;
 
     private byte[] transBuffer;
     private Signature ecdsa;
@@ -47,7 +50,7 @@ public class CryptoEMVApplet extends Applet
 	public CryptoEMVApplet()
     {
     	//Create a transient byte array to store the temporary data
-        transBuffer = new byte[200];
+        transBuffer = new byte[240];
         
         //Create a ECC(ALG_ECDSA_SHA) object instance
         ecdsa = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
@@ -81,6 +84,12 @@ public class CryptoEMVApplet extends Applet
         case INS_ECC_GET_PUBKEY: 
         	getPubKey(apdu, len);
         	break;
+        case INS_SETPKH:
+        	setPkh(apdu, len);
+        	break;
+        case INS_GETPKH:
+        	getPkh(apdu, len);
+        	break;
         case INS_ECC_SIGN:
         	signHash(apdu, len);
         	break;
@@ -91,6 +100,24 @@ public class CryptoEMVApplet extends Applet
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		}
 	}
+	
+	private void setPkh(APDU apdu, short len) {
+		byte[] buffer = apdu.getBuffer();
+        short readOffset = getMemoryOffset();
+		
+        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA,transBuffer, (short)(readOffset+PRIVKEY_LEN+PUBKEY_LEN), PKH_LEN);
+        apdu.setOutgoingAndSend((short)0, (short)0);
+	}
+	
+	private void getPkh(APDU apdu, short len) {
+		byte[] buffer = apdu.getBuffer();
+        short readOffset = getMemoryOffset();
+		
+        Util.arrayCopyNonAtomic(transBuffer, (short)(readOffset+PRIVKEY_LEN+PUBKEY_LEN), buffer, (short)0, PKH_LEN);
+        apdu.setOutgoingAndSend((short)0, PKH_LEN);
+		
+	}
+	
 	
 	private void getInterface(APDU apdu, short len) {
 		byte[] buffer = apdu.getBuffer();
@@ -109,7 +136,7 @@ public class CryptoEMVApplet extends Applet
 	private short getMemoryOffset() { 
 		short offset = (short)0;
 		if(isContactless()) {
-			offset = (short)(offset + PRIVKEY_LEN + PUBKEY_LEN);
+			offset = (short)(PRIVKEY_LEN + PUBKEY_LEN + PKH_LEN);
 		}
 		return offset;
 	}
