@@ -2,17 +2,20 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/rpc"
-	"net/rpc/jsonrpc"
 	"time"
 
+	"github.com/mit-dci/lit/lnutil"
+
 	"github.com/ebfe/scard"
+	"github.com/mit-dci/lit/bech32"
 	"github.com/mit-dci/lit/btcutil"
 	"github.com/mit-dci/lit/btcutil/btcec"
+	"github.com/mit-dci/lit/lndc"
 	"github.com/mit-dci/lit/sig64"
-	"github.com/mit-dci/lit/wire"
-	"golang.org/x/net/websocket"
 )
 
 type RCSendArgs struct {
@@ -25,19 +28,27 @@ type StatusReply struct {
 }
 
 func main() {
+
 	for {
 		fmt.Println("Present your card to sign a request for pushing 30000 sats on channel 1")
 
 		// generate the command to push 1 sat over channel 1
-		wsConn, err := websocket.Dial("ws://localhost:8002/ws", "", "http://127.0.0.1/")
+		/*wsConn, err := websocket.Dial("ws://localhost:8002/ws", "", "http://127.0.0.1/")
 		if err != nil {
 			fmt.Printf("Error connecting to LIT: %s", err.Error())
 		}
 		rpcConn := jsonrpc.NewClient(wsConn)
+		*/
+		var err error
 
-		msg := []byte("{\"method\":\"Push\", \"args\":{\"ChanIdx\":1, \"Amt\": 30000}}")
-		hash := btcutil.Hash160(msg)
-
+		msg := new(lnutil.RemoteControlRpcRequestMsg)
+		msg.DigestType = 0x01
+		msg.Method = "LitRPC.Push"
+		msg.Args, err = json.Marshal(map[string]interface{}{"Idx": 1, "Amt": 30000})
+		if err != nil {
+			fmt.Println("Error serializing arguments:", err)
+			return
+		}
 		// Establish a PC/SC context
 		context, err := scard.EstablishContext()
 		if err != nil {
@@ -103,6 +114,15 @@ func main() {
 			return
 		}
 
+		// Get node PKH from card
+		pkhBytes, err := card.Transmit([]byte{0x80, 0x46, 0x00, 0x00})
+		if err != nil {
+			fmt.Println("Error Transmit:", err)
+			return
+		}
+		lnAdr := bech32.Encode("ln", pkhBytes[:20])
+		fmt.Printf("Node address for this card is %s\n", lnAdr)
+
 		// Get pubkey from card
 		pubKeyBytes, err := card.Transmit([]byte{0x80, 0x42, 0x00, 0x00})
 		if err != nil {
@@ -127,6 +147,13 @@ func main() {
 		}
 		pubKeyCompressed := pub.SerializeCompressed()
 
+		copy(msg.PubKey[:], pubKeyCompressed)
+		msg.PeerIdx = 0
+
+		msgBytes := msg.Bytes()
+
+		hash := btcutil.Hash160(msgBytes)
+
 		// Sign the digest on the card
 		signMessage := []byte{0x80, 0x43, 0x00, 0x00, 0x14}
 		signMessage = append(signMessage, hash...)
@@ -146,18 +173,19 @@ func main() {
 			fmt.Println("Error compressing signature:", err)
 			return
 		}
+		msg.Sig = sig64
+		request := msg.Bytes()
 
-		var buf bytes.Buffer
-		buf.WriteByte(0xB0)
-		buf.Write(pubKeyCompressed)
-		buf.Write(sig64[:])
-		buf.Write([]byte{0x01}) //RipeMD Digest
-		wire.WriteVarInt(&buf, 0, uint64(len(msg)))
-		buf.Write(msg)
-		request := buf.Bytes()
-		fmt.Printf("Sending remote control command from node 2 to node 1: %x\n", request)
-		RCSend(rpcConn, 1, request)
+		key, _ := btcec.PrivKeyFromBytes(btcec.S256(), []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F})
+		lnconn, err := lndc.Dial(key, "localhost:2448", lnAdr, net.Dial)
+		if err != nil {
+			fmt.Printf("Error connecting to the node specified on the card: %s", err.Error())
+			return
+		}
 
+		lnconn.Write(request)
+
+		lnconn.Close()
 		time.Sleep(5 * time.Second)
 	}
 }
